@@ -34,7 +34,19 @@ struct Run: ParsableCommand {
     @Option(name: .long, help: "Model id to use. Defaults to the recommended model.")
     var model: String?
 
+    @Option(name: .long, help: "Hotkey to use: fn (default), right-command, right-option.")
+    var hotkey: String = "fn"
+
+    @Flag(name: .long, help: "Tap the hotkey once to start, again to stop (default: hold).")
+    var toggle: Bool = false
+
     func run() throws {
+        guard let hotkeyTarget = HotkeyTarget(rawValue: hotkey) else {
+            FileHandle.standardError.write(Data("unknown hotkey: \(hotkey)\n".utf8))
+            FileHandle.standardError.write(Data("valid options: fn, right-command, right-option\n".utf8))
+            throw ExitCode(1)
+        }
+
         if !skipDoctor {
             let checks = DoctorReport.run()
             if !DoctorReport.allOK(checks) {
@@ -81,7 +93,7 @@ struct Run: ParsableCommand {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor(debug: debugHotkey)
+        let monitor = HotkeyMonitor(target: hotkeyTarget, debug: debugHotkey)
         let capture = AudioCapture()
         let dumpWav = self.dumpWav
         let overlay: RecordingOverlay? = noOverlay ? nil : MainActor.assumeIsolated { RecordingOverlay() }
@@ -89,69 +101,92 @@ struct Run: ParsableCommand {
             capture.onLevel = { level in overlay.pushLevel(level) }
         }
         let menuBar = MainActor.assumeIsolated { MenuBarController(modelID: chosenModel.id) }
+        let toggleMode = self.toggle
+        var isRecording = false
+
+        func beginRecording() {
+            do {
+                try capture.start()
+                isRecording = true
+                FileHandle.standardError.write(Data("● recording\n".utf8))
+                MainActor.assumeIsolated {
+                    overlay?.show(.recording)
+                    menuBar.setRecording(true)
+                }
+            } catch {
+                FileHandle.standardError.write(Data("capture failed: \(error)\n".utf8))
+            }
+        }
+
+        func endRecordingAndTranscribe() {
+            isRecording = false
+            let samples = capture.stop()
+            MainActor.assumeIsolated {
+                overlay?.show(.transcribing)
+                menuBar.setTranscribing()
+            }
+            let seconds = Double(samples.count) / AudioCapture.targetSampleRate
+            let rms = computeRMS(samples)
+            FileHandle.standardError.write(Data(
+                String(format: "○ captured %.2fs · rms %.3f\n", seconds, rms).utf8
+            ))
+            if dumpWav, !samples.isEmpty {
+                let path = "/tmp/parrot-last.wav"
+                do {
+                    try WAVWriter.write(samples: samples, sampleRate: 16_000, to: path)
+                    FileHandle.standardError.write(Data("  wrote \(path)\n".utf8))
+                } catch {
+                    FileHandle.standardError.write(Data("  wav write failed: \(error)\n".utf8))
+                }
+            }
+            guard !samples.isEmpty else {
+                MainActor.assumeIsolated {
+                    overlay?.hide()
+                    menuBar.setRecording(false)
+                }
+                return
+            }
+            Task {
+                let started = Date()
+                do {
+                    let text = try await transcriber.transcribe(samples)
+                    let elapsed = Date().timeIntervalSince(started)
+                    FileHandle.standardError.write(Data(
+                        String(format: "→ %.2fs · %@\n", elapsed, text).utf8
+                    ))
+                    await MainActor.run {
+                        TextInjector.inject(text)
+                        overlay?.hide()
+                        menuBar.setRecording(false)
+                    }
+                } catch {
+                    FileHandle.standardError.write(Data("transcription failed: \(error)\n".utf8))
+                    await MainActor.run {
+                        overlay?.hide()
+                        menuBar.setRecording(false)
+                    }
+                }
+            }
+        }
 
         do {
             try monitor.start { event in
+                if toggleMode {
+                    // Only the physical key-down edge matters; each tap flips
+                    // between recording and transcribing.
+                    guard case .pressed = event else { return }
+                    if isRecording {
+                        endRecordingAndTranscribe()
+                    } else {
+                        beginRecording()
+                    }
+                    return
+                }
                 switch event {
                 case .pressed:
-                    do {
-                        try capture.start()
-                        FileHandle.standardError.write(Data("● recording\n".utf8))
-                        MainActor.assumeIsolated {
-                            overlay?.show(.recording)
-                            menuBar.setRecording(true)
-                        }
-                    } catch {
-                        FileHandle.standardError.write(Data("capture failed: \(error)\n".utf8))
-                    }
+                    beginRecording()
                 case .released:
-                    let samples = capture.stop()
-                    MainActor.assumeIsolated {
-                        overlay?.show(.transcribing)
-                        menuBar.setTranscribing()
-                    }
-                    let seconds = Double(samples.count) / AudioCapture.targetSampleRate
-                    let rms = computeRMS(samples)
-                    FileHandle.standardError.write(Data(
-                        String(format: "○ captured %.2fs · rms %.3f\n", seconds, rms).utf8
-                    ))
-                    if dumpWav, !samples.isEmpty {
-                        let path = "/tmp/parrot-last.wav"
-                        do {
-                            try WAVWriter.write(samples: samples, sampleRate: 16_000, to: path)
-                            FileHandle.standardError.write(Data("  wrote \(path)\n".utf8))
-                        } catch {
-                            FileHandle.standardError.write(Data("  wav write failed: \(error)\n".utf8))
-                        }
-                    }
-                    guard !samples.isEmpty else {
-                        MainActor.assumeIsolated {
-                            overlay?.hide()
-                            menuBar.setRecording(false)
-                        }
-                        return
-                    }
-                    Task {
-                        let started = Date()
-                        do {
-                            let text = try await transcriber.transcribe(samples)
-                            let elapsed = Date().timeIntervalSince(started)
-                            FileHandle.standardError.write(Data(
-                                String(format: "→ %.2fs · %@\n", elapsed, text).utf8
-                            ))
-                            await MainActor.run {
-                                TextInjector.inject(text)
-                                overlay?.hide()
-                                menuBar.setRecording(false)
-                            }
-                        } catch {
-                            FileHandle.standardError.write(Data("transcription failed: \(error)\n".utf8))
-                            await MainActor.run {
-                                overlay?.hide()
-                                menuBar.setRecording(false)
-                            }
-                        }
-                    }
+                    endRecordingAndTranscribe()
                 }
             }
         } catch {
@@ -169,7 +204,8 @@ struct Run: ParsableCommand {
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        FileHandle.standardError.write(Data("listening on fn hold · model: \(chosenModel.id) · ^C to quit\n".utf8))
+        let modeLabel = toggleMode ? "toggle" : "hold"
+        FileHandle.standardError.write(Data("listening on \(hotkeyTarget.rawValue) \(modeLabel) · model: \(chosenModel.id) · ^C to quit\n".utf8))
         app.run()
     }
 }

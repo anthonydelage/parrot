@@ -17,6 +17,12 @@ struct Install: ParsableCommand {
     @Flag(name: .long, help: "Remove the launch-at-login agent.")
     var uninstall: Bool = false
 
+    @Option(name: .long, help: "Hotkey the daemon should use: fn (default), right-command, right-option.")
+    var hotkey: String = "fn"
+
+    @Flag(name: .long, help: "Tap the hotkey once to start, again to stop (default: hold).")
+    var toggle: Bool = false
+
     func run() throws {
         if launchAtLogin == uninstall {
             FileHandle.standardError.write(Data(
@@ -28,6 +34,11 @@ struct Install: ParsableCommand {
         if uninstall {
             try removeAgent()
         } else {
+            guard HotkeyTarget(rawValue: hotkey) != nil else {
+                FileHandle.standardError.write(Data("unknown hotkey: \(hotkey)\n".utf8))
+                FileHandle.standardError.write(Data("valid options: fn, right-command, right-option\n".utf8))
+                throw ExitCode(1)
+            }
             try writeAgent()
         }
     }
@@ -46,9 +57,14 @@ struct Install: ParsableCommand {
     private func writeAgent() throws {
         let binary = try resolveBinaryPath()
 
+        var args = [binary, "run", "--skip-doctor", "--hotkey", hotkey]
+        if toggle {
+            args.append("--toggle")
+        }
+
         let plist: [String: Any] = [
             "Label": Self.label,
-            "ProgramArguments": [binary, "run", "--skip-doctor"],
+            "ProgramArguments": args,
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",

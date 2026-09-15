@@ -3,6 +3,32 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+/// The modifier key that triggers push-to-talk.
+enum HotkeyTarget: String {
+    case fn
+    case rightCommand = "right-command"
+    case rightOption = "right-option"
+
+    var standardMask: CGEventFlags {
+        switch self {
+        case .fn: return .maskSecondaryFn
+        case .rightCommand: return .maskCommand
+        case .rightOption: return .maskAlternate
+        }
+    }
+
+    /// Apple's stable virtual keycodes (kVK_RightCommand / kVK_RightOption)
+    /// let us react only to the right-hand key on flagsChanged events. `fn`
+    /// has no distinct left/right pair, so its mask alone is unambiguous.
+    var keyCode: Int64? {
+        switch self {
+        case .fn: return nil
+        case .rightCommand: return 54
+        case .rightOption: return 61
+        }
+    }
+}
+
 /// Watches a single modifier key (default: Fn) and emits press/release edges.
 /// Requires Accessibility permission. If the tap fails to register, callers
 /// will see an error from `start()`.
@@ -10,16 +36,15 @@ final class HotkeyMonitor {
     enum Event { case pressed, released }
     enum HotkeyError: Error { case tapCreateFailed }
 
-    /// Mask of the modifier we treat as the hotkey. Fn = `.maskSecondaryFn`.
-    private let mask: CGEventFlags
+    private let target: HotkeyTarget
     private let debug: Bool
     private var onEvent: ((Event) -> Void)?
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
 
-    init(mask: CGEventFlags = .maskSecondaryFn, debug: Bool = false) {
-        self.mask = mask
+    init(target: HotkeyTarget = .fn, debug: Bool = false) {
+        self.target = target
         self.debug = debug
     }
 
@@ -87,7 +112,10 @@ final class HotkeyMonitor {
                 ))
         }
         guard type == .flagsChanged else { return }
-        let pressed = event.flags.contains(mask)
+        if let keyCode = target.keyCode {
+            guard event.getIntegerValueField(.keyboardEventKeycode) == keyCode else { return }
+        }
+        let pressed = event.flags.contains(target.standardMask)
         guard pressed != isPressed else { return }
         isPressed = pressed
         onEvent?(pressed ? .pressed : .released)
