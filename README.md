@@ -37,8 +37,25 @@ parrot models list                     # list available models
 parrot models download <id>            # pre-download a model
 parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
 parrot --hotkey right-option           # change the push-to-talk key
+parrot --toggle                        # tap to start, tap again to stop (default: hold)
 parrot --no-overlay                    # disable the bottom-of-screen pill
 ```
+
+## Restart the daemon
+
+The LaunchAgent keeps the flags you passed to `parrot install`. To set them, reinstall with the flags you want:
+
+```sh
+parrot install --launch-at-login --hotkey right-command --toggle
+```
+
+To restart the daemon with those saved flags (works whether it is running or stopped):
+
+```sh
+launchctl kickstart -k gui/$(id -u)/com.digimata.parrot
+```
+
+The saved flags live in `~/Library/LaunchAgents/com.digimata.parrot.plist`. Logs go to `/tmp/parrot.out.log` and `/tmp/parrot.err.log`.
 
 ## Stack
 
