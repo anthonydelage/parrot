@@ -148,18 +148,28 @@ private struct OverlayPill: View {
 
 private struct Waveform: View {
     let levels: [Float]
-    private let color = Color(red: 181/255.0, green: 209/255.0, blue: 255/255.0)
 
     var body: some View {
         HStack(alignment: .center, spacing: 4) {
             ForEach(Array(levels.enumerated()), id: \.offset) { _, level in
                 Capsule()
-                    .fill(color)
+                    .fill(Self.heatColor(level))
                     .frame(width: 2.5)
                     .frame(maxHeight: .infinity)
                     .scaleEffect(y: max(0.10, CGFloat(level)), anchor: .center)
                     .animation(.easeOut(duration: 0.09), value: level)
             }
         }
+    }
+
+    /// Violet at rest, pink mid, orange when loud.
+    private static func heatColor(_ level: Float) -> Color {
+        let l = Double(min(1, max(0, level)))
+        let a = (124.0, 58.0, 237.0), b = (236.0, 72.0, 153.0), c = (251.0, 146.0, 60.0)
+        let (from, to, t) = l < 0.5 ? (a, b, l / 0.5) : (b, c, (l - 0.5) / 0.5)
+        return Color(
+            red: (from.0 + (to.0 - from.0) * t) / 255,
+            green: (from.1 + (to.1 - from.1) * t) / 255,
+            blue: (from.2 + (to.2 - from.2) * t) / 255)
     }
 }
