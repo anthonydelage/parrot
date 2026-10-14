@@ -8,6 +8,8 @@ import CoreGraphics
 package struct HotkeySettings: Codable, Equatable {
     /// The modifier held to dictate. An unknown name decodes to the default.
     package var key: HotkeyKey = .fn
+    /// Hold to talk, or tap to start and tap to stop. An unknown name decodes to hold.
+    package var mode: HotkeyMode = .hold
 
     package init() {}
 
@@ -15,6 +17,33 @@ package struct HotkeySettings: Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let name = try c.decodeIfPresent(String.self, forKey: .key)
         key = name.flatMap(HotkeyKey.init(rawValue:)) ?? .fn
+        let modeName = try c.decodeIfPresent(String.self, forKey: .mode)
+        mode = modeName.flatMap(HotkeyMode.init(rawValue:)) ?? .hold
+    }
+}
+
+/// How the hotkey drives a dictation. The raw value is the name in
+/// `settings.json` and for `--toggle`.
+public enum HotkeyMode: String, Codable, CaseIterable, Sendable {
+    /// Recording lasts while the key is down (ADR-003).
+    case hold
+    /// One tap starts recording and the next tap stops it.
+    case toggle
+
+    /// How the mode is named in the Settings window.
+    package var displayName: String {
+        switch self {
+        case .hold: return "Hold to talk"
+        case .toggle: return "Tap to start and stop"
+        }
+    }
+
+    /// The verb in the menu bar and log lines: "hold right ⌥ to dictate".
+    package var verb: String {
+        switch self {
+        case .hold: return "hold"
+        case .toggle: return "tap"
+        }
     }
 }
 

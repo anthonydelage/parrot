@@ -10,7 +10,9 @@ import ParrotCore
 /// rather than rebuilding the menu.
 @MainActor
 final class MenuBarController {
-    private static func readyStatus(_ key: HotkeyKey) -> String { "idle · hold \(key.shortName) to dictate" }
+    private static func readyStatus(_ key: HotkeyKey, _ mode: HotkeyMode) -> String {
+        "idle · \(mode.verb) \(key.shortName) to dictate"
+    }
 
     private let statusItem: NSStatusItem
     /// Slot: what the dictation loop is doing. Driven as a `DictationObserver`.
@@ -35,10 +37,11 @@ final class MenuBarController {
     /// A degraded hotkey tap replaces the idle line, so the menu bar does not
     /// claim fn works when it does not (#37).
     private var hotkeyHealth: HotkeyHealth = .ok
-    /// The key the idle line tells the user to hold (#42).
+    /// The key the idle line tells the user to hold or tap (#42).
     private var hotkey: HotkeyKey = .fn
+    private var hotkeyMode: HotkeyMode = .hold
     private var isIdle = true
-    private var idleStatus: String { hotkeyHealth.statusText ?? Self.readyStatus(hotkey) }
+    private var idleStatus: String { hotkeyHealth.statusText ?? Self.readyStatus(hotkey, hotkeyMode) }
 
     init(modelID: String) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -46,7 +49,7 @@ final class MenuBarController {
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        statusLine = NSMenuItem(title: Self.readyStatus(.fn), action: nil, keyEquivalent: "")
+        statusLine = NSMenuItem(title: Self.readyStatus(.fn, .hold), action: nil, keyEquivalent: "")
         statusLine.isEnabled = false
         menu.addItem(statusLine)
 
@@ -99,8 +102,9 @@ final class MenuBarController {
         if isIdle { setStatus(idleStatus) }
     }
 
-    func setHotkey(_ key: HotkeyKey) {
+    func setHotkey(_ key: HotkeyKey, mode: HotkeyMode) {
         hotkey = key
+        hotkeyMode = mode
         if isIdle { setStatus(idleStatus) }
     }
 

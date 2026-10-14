@@ -2,6 +2,8 @@
 
 Last updated: `2026.09.27`
 
+> Amended by [ADR-007](007-toggle-mode.md): toggle mode is now a setting, off by default.
+
 > Parrot has one interaction: hold a modifier key, speak, release. The key is configurable among fn and the left or right Option, Command, Control, and Shift keys. The event tap listens to modifier changes only, so Parrot never sees what the user types.
 
 ## 1. Decision

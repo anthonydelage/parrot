@@ -27,7 +27,7 @@ public final class HotkeyMonitor {
         case pressed
         /// Stop recording and transcribe.
         case released
-        /// Stop recording and discard it: a short tap, a chord, or a key switch.
+        /// Stop recording and discard it: a short tap, a chord, or a key or mode switch.
         case cancelled
     }
     public enum HotkeyError: Error { case tapCreateFailed }
@@ -37,6 +37,8 @@ public final class HotkeyMonitor {
 
     /// The modifier held to dictate. Change it with `setKey(_:)`.
     public private(set) var key: HotkeyKey
+    /// Hold to talk or tap to toggle. Change it with `setMode(_:)`.
+    public var mode: HotkeyMode { gesture.mode }
     private let debug: Bool
     private var onEvent: ((Event) -> Void)?
     private var tap: CFMachPort?
@@ -55,9 +57,10 @@ public final class HotkeyMonitor {
         }
     }
 
-    public init(key: HotkeyKey = .fn, debug: Bool = false) {
+    public init(key: HotkeyKey = .fn, mode: HotkeyMode = .hold, debug: Bool = false) {
         self.key = key
         self.debug = debug
+        gesture = Gesture(mode: mode)
     }
 
     /// Switch to another key without recreating the tap; the next press of
@@ -66,6 +69,15 @@ public final class HotkeyMonitor {
         guard newKey != key else { return }
         let action = gesture.reset()
         key = newKey
+        if let action { emit(action) }
+    }
+
+    /// Switch between hold and toggle without recreating the tap. A
+    /// recording in progress is cancelled.
+    public func setMode(_ newMode: HotkeyMode) {
+        guard newMode != mode else { return }
+        let action = gesture.reset()
+        gesture.mode = newMode
         if let action { emit(action) }
     }
 

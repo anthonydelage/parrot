@@ -68,6 +68,82 @@ final class GestureTests: XCTestCase {
     }
 }
 
+final class ToggleGestureTests: XCTestCase {
+    private let down = Gesture.Input.hotkeyDown(othersHeld: false)
+
+    func testTapStartsAndNextTapTranscribes() {
+        var g = Gesture(mode: .toggle)
+        XCTAssertEqual(g.handle(down, at: 10), .start)
+        XCTAssertTrue(g.isHeld)
+        // Letting go of the first tap keeps recording, even a very short one.
+        XCTAssertNil(g.handle(.hotkeyUp, at: 10.1))
+        XCTAssertFalse(g.isHeld)
+        XCTAssertEqual(g.handle(down, at: 15), .transcribe)
+        XCTAssertTrue(g.isHeld)
+        // The release of the stopping tap does nothing.
+        XCTAssertNil(g.handle(.hotkeyUp, at: 15.1))
+        XCTAssertFalse(g.isHeld)
+    }
+
+    func testTheNextRecordingStartsAfterTheStoppingTapIsReleased() {
+        var g = Gesture(mode: .toggle)
+        _ = g.handle(down, at: 0)
+        _ = g.handle(.hotkeyUp, at: 0.1)
+        XCTAssertEqual(g.handle(down, at: 5), .transcribe)
+        _ = g.handle(.hotkeyUp, at: 5.1)
+        XCTAssertEqual(g.handle(down, at: 8), .start)
+    }
+
+    func testASecondTapWithinTheMinimumHoldDiscards() {
+        var g = Gesture(mode: .toggle)
+        _ = g.handle(down, at: 0)
+        _ = g.handle(.hotkeyUp, at: 0.05)
+        XCTAssertEqual(g.handle(down, at: 0.2), .cancel)
+    }
+
+    func testAnotherModifierDuringTheFirstTapCancels() {
+        var g = Gesture(mode: .toggle)
+        XCTAssertEqual(g.handle(down, at: 0), .start)
+        XCTAssertEqual(g.handle(.otherModifier, at: 0.1), .cancel)
+        XCTAssertNil(g.handle(.hotkeyUp, at: 0.2))
+        XCTAssertEqual(g.handle(down, at: 3), .start)
+    }
+
+    func testPressWithAnotherModifierHeldDoesNotRecord() {
+        var g = Gesture(mode: .toggle)
+        XCTAssertNil(g.handle(.hotkeyDown(othersHeld: true), at: 0))
+        XCTAssertNil(g.handle(.hotkeyUp, at: 0.2))
+        XCTAssertEqual(g.handle(down, at: 2), .start)
+    }
+
+    func testAChordOnTheHotkeyDoesNotStopALatchedRecording() {
+        var g = Gesture(mode: .toggle)
+        _ = g.handle(down, at: 0)
+        _ = g.handle(.hotkeyUp, at: 0.1)
+        XCTAssertNil(g.handle(.hotkeyDown(othersHeld: true), at: 4))
+        XCTAssertNil(g.handle(.otherModifier, at: 4.1))
+        XCTAssertNil(g.handle(.hotkeyUp, at: 4.2))
+        // Still recording: a clean tap stops it.
+        XCTAssertEqual(g.handle(down, at: 6), .transcribe)
+    }
+
+    func testResetCancelsALatchedRecording() {
+        var g = Gesture(mode: .toggle)
+        _ = g.handle(down, at: 0)
+        _ = g.handle(.hotkeyUp, at: 0.1)
+        XCTAssertEqual(g.reset(), .cancel)
+        XCTAssertFalse(g.isHeld)
+        XCTAssertEqual(g.handle(down, at: 3), .start)
+    }
+
+    func testHoldModeIsUnchangedByTheModeSwitch() {
+        var g = Gesture(mode: .toggle)
+        g.mode = .hold
+        XCTAssertEqual(g.handle(down, at: 0), .start)
+        XCTAssertEqual(g.handle(.hotkeyUp, at: 2), .transcribe)
+    }
+}
+
 final class HotkeyMatchTests: XCTestCase {
     private func input(_ keycode: Int64, _ flags: CGEventFlags, _ key: HotkeyKey, held: Bool) -> Gesture.Input? {
         HotkeyMonitor.input(keycode: keycode, flags: flags, key: key, held: held)

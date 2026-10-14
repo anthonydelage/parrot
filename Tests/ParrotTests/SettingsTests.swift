@@ -38,6 +38,27 @@ final class SettingsFieldTests: XCTestCase {
         XCTAssertEqual(try decode(#"{"hotkey": {"key": "caps-lock"}}"#).hotkey.key, .fn)
     }
 
+    func testHotkeyModeDefaultsToHold() throws {
+        XCTAssertEqual(try decode("{}").hotkey.mode, .hold)
+        XCTAssertEqual(try decode(#"{"hotkey": {"key": "right-option"}}"#).hotkey.mode, .hold)
+    }
+
+    func testHotkeyModeDecodesByName() throws {
+        XCTAssertEqual(try decode(#"{"hotkey": {"mode": "toggle"}}"#).hotkey.mode, .toggle)
+        XCTAssertEqual(try decode(#"{"hotkey": {"key": "right-command", "mode": "toggle"}}"#).hotkey.key, .rightCommand)
+    }
+
+    func testUnknownHotkeyModeFallsBackToHold() throws {
+        XCTAssertEqual(try decode(#"{"hotkey": {"mode": "latch"}}"#).hotkey.mode, .hold)
+    }
+
+    func testHotkeyModeSurvivesARoundTrip() throws {
+        var settings = Settings()
+        settings.hotkey.mode = .toggle
+        let data = try JSONEncoder().encode(settings)
+        XCTAssertEqual(try JSONDecoder().decode(Settings.self, from: data).hotkey.mode, .toggle)
+    }
+
     func testModelAndLanguageDefaultToNil() throws {
         let settings = try decode("{}")
         XCTAssertNil(settings.model.id)

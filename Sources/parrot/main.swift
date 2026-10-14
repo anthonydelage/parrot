@@ -62,6 +62,12 @@ struct Run: ParsableCommand {
     )
     var hotkey: HotkeyKey?
 
+    @Flag(
+        name: .long,
+        help: "Tap the hotkey once to start and again to stop, for this run only, overriding Settings."
+    )
+    var toggle: Bool = false
+
     func run() throws {
         // The app and a foreground run would both paste every dictation.
         guard AppLaunch.claimSingleInstance() else {
@@ -77,7 +83,8 @@ struct Run: ParsableCommand {
                 model: model,
                 injectMode: injectMode,
                 captureMode: capture,
-                hotkey: hotkey
+                hotkey: hotkey,
+                hotkeyMode: toggle ? .toggle : nil
             ))
         } catch let failure as StartupFailure {
             // The one exit-code rule. A supervisor that relaunches on nonzero

@@ -15,6 +15,8 @@ public struct DaemonOptions {
     public var captureMode: CaptureMode
     /// The push-to-talk key for this run only (#42). Nil uses the saved setting.
     public var hotkey: HotkeyKey?
+    /// Hold or toggle for this run only. Nil uses the saved setting.
+    public var hotkeyMode: HotkeyMode?
 
     public init(
         skipDoctor: Bool,
@@ -24,7 +26,8 @@ public struct DaemonOptions {
         model: String?,
         injectMode: InjectMode = .paste,
         captureMode: CaptureMode = .standard,
-        hotkey: HotkeyKey? = nil
+        hotkey: HotkeyKey? = nil,
+        hotkeyMode: HotkeyMode? = nil
     ) {
         self.skipDoctor = skipDoctor
         self.debugHotkey = debugHotkey
@@ -34,6 +37,7 @@ public struct DaemonOptions {
         self.injectMode = injectMode
         self.captureMode = captureMode
         self.hotkey = hotkey
+        self.hotkeyMode = hotkeyMode
     }
 }
 
@@ -91,7 +95,11 @@ public enum Daemon {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor(key: options.hotkey ?? settings.current.hotkey.key, debug: options.debugHotkey)
+        let monitor = HotkeyMonitor(
+            key: options.hotkey ?? settings.current.hotkey.key,
+            mode: options.hotkeyMode ?? settings.current.hotkey.mode,
+            debug: options.debugHotkey
+        )
         let capture = AudioCapture(mode: options.captureMode)
         let overlay: RecordingOverlay? = options.noOverlay ? nil : RecordingOverlay()
         if let overlay {
@@ -102,7 +110,7 @@ public enum Daemon {
         let menuBar = MenuBarController(modelID: model.id)
         let settingsWindow = SettingsWindow(store: settings)
         menuBar.onOpenSettings = { settingsWindow.show() }
-        menuBar.setHotkey(monitor.key)
+        menuBar.setHotkey(monitor.key, mode: monitor.mode)
         // Parrot.app sets up the hotkey, languages and permissions, and
         // explains each permission before macOS asks (#51).
         OnboardingWindow.startIfNeeded(store: settings, menuBar: menuBar)
@@ -160,15 +168,24 @@ public enum Daemon {
         // or a hand edit of settings.json (#41). CLI flags only set the
         // starting values of a foreground run.
         settings.observe { old, new in
-            if old.hotkey != new.hotkey {
+            if old.hotkey.key != new.hotkey.key {
                 if options.hotkey != nil {
                     Log.info("hotkey: \(new.hotkey.key.rawValue) saved; --hotkey \(monitor.key.rawValue) stays in effect for this run")
                 } else {
                     // The tap stays; it matches the new key from the next event.
                     monitor.setKey(new.hotkey.key)
-                    menuBar.setHotkey(new.hotkey.key)
-                    Log.info("hotkey: \(new.hotkey.key.rawValue); hold \(new.hotkey.key.shortName) to dictate")
                 }
+            }
+            if old.hotkey.mode != new.hotkey.mode {
+                if options.hotkeyMode != nil {
+                    Log.info("hotkey mode: \(new.hotkey.mode.rawValue) saved; --toggle stays in effect for this run")
+                } else {
+                    monitor.setMode(new.hotkey.mode)
+                }
+            }
+            if old.hotkey != new.hotkey {
+                menuBar.setHotkey(monitor.key, mode: monitor.mode)
+                Log.info("hotkey: \(monitor.mode.verb) \(monitor.key.shortName) to dictate")
             }
             if old.model != new.model {
                 switcher.select(new.model.id)
@@ -249,7 +266,7 @@ public enum Daemon {
                 throw StartupFailure.hotkeyUnavailable(error)
             }
             menuBar.setHotkeyHealth(.ok)
-            Log.info("listening on \(monitor.key.shortName) hold")
+            Log.info("listening on \(monitor.key.shortName) \(monitor.mode.rawValue)")
         }
 
         if AXIsProcessTrusted() {
