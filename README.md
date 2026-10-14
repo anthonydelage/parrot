@@ -1,76 +1,86 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/icon-dark.png">
+    <img src="docs/assets/icon.png" width="96" alt="parrot">
+  </picture>
+</p>
+
 # parrot
 
-A minimal macOS dictation daemon. Push-to-talk, on-device transcription, text inserted at the cursor.
+Hold `fn`, speak, release. Your words appear at the cursor. On-device dictation for macOS.
 
-## Install
+## 1. Install
 
-```sh
-curl -fsSL https://digimata.github.io/parrot/install.sh | sh
-parrot setup                       # grants mic + accessibility, downloads the model
-parrot install --launch-at-login   # optional — runs in the background on login
-```
+Download [Parrot.dmg](https://github.com/humanitas-labs/parrot/releases/latest/download/Parrot.dmg), drag Parrot to Applications, and open it. Turn on Parrot when macOS asks for Accessibility and the microphone. The first start downloads the speech model (about 150 MB).
 
-**Requires:** macOS 14+ on Apple Silicon (M1 or newer). Transcription runs on the Apple Neural Engine via CoreML — so the installer refuses to run on Intel.
-
-The installer drops the binary in `/usr/local/bin/parrot`. Builds are unsigned for now, so the installer strips the quarantine xattr — once you've inspected the script you'll see exactly what it does.
-
-## How to use
-
-1. **Run it.** Either `parrot install --launch-at-login` (daemonized, runs forever, lives in the menu bar), or `parrot` in any terminal tab.
-2. **Click into the text field you want to dictate into** — Messages, the address bar, a Slack thread, anywhere a cursor blinks.
-3. **Hold the `fn` key, speak, release.** A small pill appears at the bottom of the screen while the mic is hot.
-4. **The transcript types itself in at the cursor** when you release. Usually within 200-300ms.
-
-That's it. There is no record button, no stop button, no "send" — `fn` is the whole interface.
-
-> **Note:** on most modern Macs the `fn` key is the bottom-left key. If yours is set to "Change input source" or "Show emoji & symbols," `parrot setup` will tell you how to flip it back to plain `fn`.
-
-## CLI
+Or from a terminal, which also installs the `parrot` command:
 
 ```sh
-parrot                                 # run in the foreground (^C to quit)
-parrot setup                           # one-time setup: permissions + model download
-parrot install --launch-at-login       # register a LaunchAgent (background daemon)
-parrot install --uninstall             # remove the LaunchAgent
-parrot doctor                          # check permissions + fn key setting
-parrot models list                     # list available models
-parrot models download <id>            # pre-download a model
-parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
-parrot --hotkey right-option           # change the push-to-talk key
-parrot --toggle                        # tap to start, tap again to stop (default: hold)
-parrot --no-overlay                    # disable the bottom-of-screen pill
+curl -fsSL https://perroquet.xyz/install.sh | sh
 ```
 
-## Restart the daemon
+Requires macOS 14+ on Apple Silicon. Parrot is signed and notarized, so permissions survive updates, and it updates itself: it checks once a day, and **Check for Updates…** in its menu checks now. Upgrading from the command-line version: open the new app once and it replaces the old install.
 
-The LaunchAgent keeps the flags you passed to `parrot install`. To set them, reinstall with the flags you want:
+## 2. Usage
+
+1. Click into any text field.
+2. Hold `fn` and speak. A small pill at the bottom of the screen shows the mic is live. On a keyboard where `fn` does nothing (Logitech and most third-party keyboards), choose another key under **Hotkey** in **Settings…**: left or right Option, Command, Control, or Shift. The change applies from the next press.
+3. Release. The transcript is pasted at the cursor, usually within 200–300 ms, and your clipboard is restored.
+
+For hands-free dictation, set **Mode** to **Tap to start and stop** in **Settings…**: tap the hotkey to start, tap it again to stop and paste. A second tap within 0.3 s discards the recording. Changing the hotkey or mode in Settings discards a recording in progress.
+
+Choose **Launch at login** in **Settings…** to start Parrot with your Mac. A tap shorter than 0.3 s, or a hold with another modifier, is ignored, so shortcuts on the hotkey still work. If `fn` is mapped to input source or emoji, `parrot doctor` shows how to fix it.
+
+To dictate in another language, choose a multilingual model in Settings (⌘, from the menu), then either one Language or Automatic. Automatic detects which of the languages under **Languages** each dictation is in, and never picks one you haven't listed. The list starts as your Mac's languages.
+
+## 3. Dictionary
+
+Add your names and technical terms to `~/.config/parrot/dictionary`, a plain-text table of each word and what the model writes instead, and Parrot spells them your way. **Open Dictionary File** in Settings opens it. Edits apply on the next dictation. See [docs/dictionary.md](docs/dictionary.md).
+
+## 4. CLI
+
+| Command | What it does |
+|---|---|
+| `parrot` | Run in the foreground (^C to quit) |
+| `parrot setup` | One-time setup: permissions and model download |
+| `parrot doctor` | Check permissions, and the `fn` key setting when the hotkey is `fn` |
+| `parrot install --launch-at-login` | Start Parrot at login |
+| `parrot install --cli` | Link `/usr/local/bin/parrot` to Parrot.app |
+| `parrot install --uninstall` | Stop launching at login and remove logs |
+| `parrot models list` | List available models |
+| `parrot --model whisper-large-v3-turbo` | Larger, multilingual model |
+| `parrot --hotkey right-option` | Use another key for this run only; Settings… changes the saved key |
+| `parrot --toggle` | Tap to start and tap to stop, for this run only; Settings… changes the saved mode |
+| `parrot --no-overlay` | Hide the recording pill |
+| `parrot --inject-mode type-unicode` | Type instead of paste (leaves the clipboard alone) |
+
+## 5. Restart and logs
+
+Settings apply as you change them, in **Settings…** or by editing `~/.config/parrot/settings.json`: hotkey, mode, model, and language. Dictionary edits apply on the next dictation. Restart only after a crash or when macOS changes a permission.
+
+To restart Parrot.app:
 
 ```sh
-parrot install --launch-at-login --hotkey right-command --toggle
+pkill -x parrot; sleep 1; open -a Parrot
 ```
 
-To restart the daemon with those saved flags (works whether it is running or stopped):
+Parrot.app writes its log to `~/Library/Logs/parrot/parrot.err.log`. The log holds timings and character counts, never what you said.
 
 ```sh
-launchctl kickstart -k gui/$(id -u)/com.digimata.parrot
+tail -f ~/Library/Logs/parrot/parrot.err.log
 ```
 
-The saved flags live in `~/Library/LaunchAgents/com.digimata.parrot.plist`. Logs go to `/tmp/parrot.out.log` and `/tmp/parrot.err.log`.
+## 6. How it works
 
-## Stack
+WhisperKit runs Whisper on the Apple Neural Engine via CoreML, AVAudioEngine captures the mic, a CGEventTap watches the hotkey, and a synthesized ⌘V pastes the result. Nothing leaves your Mac, and logs never contain what you said. See [docs/architecture.md](docs/architecture.md).
 
-- **Swift** — single SPM executable target
-- **WhisperKit** — Whisper inference via CoreML, ANE-accelerated
-- **AVAudioEngine** — mic capture
-- **CGEventTap** — global hotkey
-- **CGEvent** — text injection at cursor
-- **NSWindow** (borderless, click-through) — recording-indicator pill
-
-See [docs/architecture.md](docs/architecture.md) for design notes.
-
-## Build from source
+## 7. Build from source
 
 ```sh
-swift build -c release
-.build/release/parrot --help
+swift build -c release && swift test
+scripts/dev-install.sh      # build, sign, install Parrot.app, link the CLI
 ```
+
+## 8. License
+
+[MIT](LICENSE)
