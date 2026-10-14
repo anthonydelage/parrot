@@ -70,7 +70,7 @@ Sources/ParrotCore/                the engine, linked by other apps through the 
     HotkeyMonitor.swift         CGEventTap for modifier changes only
     TapRecovery.swift           the tap's health and recovery when macOS disables it
     HotkeySettings.swift        the hotkey setting and the keys it can be
-    Gesture.swift               press/release filtering: short-tap discard, chord cancel (pure, tested)
+    Gesture.swift               press/release filtering: short-tap discard, chord cancel, hold or toggle mode (pure, tested)
     FocusSnapshot.swift         what was focused, whether it is editable or secure, and the character before the cursor
     CursorDelivery.swift        Parrot's TranscriptDelivery: inject, copy or discard, from the focus at start and at delivery (pure decision, tested)
     Spacing.swift               the spaces around a transcript: always after, before when the text there needs it (pure, tested)
@@ -248,3 +248,5 @@ Architecture decisions are recorded in [`decisions/`](decisions/). Each says wha
 | [003](decisions/003-push-to-talk-on-a-modifier.md) | Push-to-talk on a single modifier key |
 | [004](decisions/004-local-data-and-privacy.md) | Local data and privacy |
 | [005](decisions/005-signed-app-identity.md) | Signed app identity |
+| [006](decisions/006-engine-library.md) | The engine as its own library |
+| [007](decisions/007-toggle-mode.md) | Toggle mode as a hotkey setting |
