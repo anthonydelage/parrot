@@ -298,7 +298,7 @@ private struct Waveform: View {
                 ForEach(Array(levels.enumerated()), id: \.offset) { i, level in
                     let bar = bar(i, level: level, height: geo.size.height)
                     Capsule()
-                        .fill(transcribing ? Self.heatColor(0) : Self.heatColor(level))
+                        .fill(color(level))
                         .frame(width: bar.width, height: bar.height)
                         .opacity(bar.opacity)
                         .animation(
@@ -326,8 +326,14 @@ private struct Waveform: View {
         return (Self.dotSize, Self.dotSize, 1)
     }
 
-    /// Violet at rest, pink mid, orange when loud. While transcribing the
-    /// bars and dots stay violet.
+    /// The dots are white, so transcribing reads apart from a quiet
+    /// recording; bars resting after silence stay violet.
+    private func color(_ level: Float) -> Color {
+        guard transcribing else { return Self.heatColor(level) }
+        return heardVoice ? .white : Self.heatColor(0)
+    }
+
+    /// Violet at rest, pink mid, orange when loud.
     private static func heatColor(_ level: Float) -> Color {
         let l = Double(min(1, max(0, level)))
         let a = (124.0, 58.0, 237.0), b = (236.0, 72.0, 153.0), c = (251.0, 146.0, 60.0)
