@@ -18,6 +18,12 @@
 # builds. Without an identity the app is ad-hoc signed and every build is a
 # new identity; the script says so.
 #
+# The hardened runtime is on only for a Developer ID identity. It enforces
+# library validation, which loads only frameworks signed by the app's own
+# Team ID, and an ad-hoc or self-signed identity has none: the app would
+# crash at launch because it cannot load Sparkle.framework. Such a local
+# build is signed without the hardened runtime and cannot be notarized.
+#
 #   PARROT_SIGN_IDENTITY   signing identity (default: the keychain's Developer ID)
 #   PARROT_TIMESTAMP=none  skip the secure timestamp (local builds, offline);
 #                          notarization needs it, so releases leave this unset
@@ -73,6 +79,7 @@ rm -rf "$ICONSET"
 TIMESTAMP="--timestamp"
 [ "${PARROT_TIMESTAMP:-}" = "none" ] && TIMESTAMP="--timestamp=none"
 
+RUNTIME="--options runtime"
 if [ -n "$IDENTITY" ]; then
     echo "→ signing as $IDENTITY"
     SIGN_AS="$IDENTITY"
@@ -82,6 +89,14 @@ else
     SIGN_AS="-"
     TIMESTAMP="--timestamp=none"
 fi
+case "$SIGN_AS" in
+    "Developer ID Application:"*) ;;
+    *)
+        # No Team ID, so library validation would reject Sparkle.framework.
+        RUNTIME=""
+        echo "  no hardened runtime: this identity has no Team ID, so the app could not load Sparkle."
+        ;;
+esac
 
 # Inside-out: each nested bundle before the one that contains it, as in
 # Sparkle's documentation. Downloader.xpc keeps its entitlements.
@@ -92,10 +107,10 @@ for nested in \
     "$SPARKLE/Autoupdate" \
     "$SPARKLE/Updater.app" \
     "$APP/Contents/Frameworks/Sparkle.framework"; do
-    codesign --force --options runtime $TIMESTAMP --preserve-metadata=entitlements \
+    codesign --force $RUNTIME $TIMESTAMP --preserve-metadata=entitlements \
         --sign "$SIGN_AS" "$nested"
 done
-codesign --force --options runtime $TIMESTAMP \
+codesign --force $RUNTIME $TIMESTAMP \
     --entitlements packaging/Parrot.entitlements \
     --sign "$SIGN_AS" "$APP"
 
