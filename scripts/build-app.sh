@@ -57,6 +57,10 @@ ditto "$(dirname "$BIN")/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.fr
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+# Fork: the feed is upstream's, and its update would replace this build with
+# theirs. Without SUFeedURL, Updater.start logs "updates off" and the menu
+# hides Check for Updates. upstream-release.yml says when upstream ships.
+plutil -remove SUFeedURL "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # SwiftPM's resource bundles (swift-transformers' fallback tokenizer

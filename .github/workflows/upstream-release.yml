@@ -1,0 +1,68 @@
+# Fork only. Opens an issue when humanitas-labs/parrot publishes a release
+# newer than .github/upstream-version, the upstream release last merged here.
+# Fork builds have Sparkle's feed removed (scripts/build-app.sh), so this is
+# the update alert. The issue lists the upstream commits since that release
+# and flags the ones that look like fixes or security work.
+#
+# After merging a release, set .github/upstream-version to its tag.
+name: upstream-release
+
+on:
+  schedule:
+    - cron: "41 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    if: github.repository != 'humanitas-labs/parrot'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: humanitas-labs/parrot
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/upstream-version
+          sparse-checkout-cone-mode: false
+
+      - name: Compare with the latest upstream release
+        run: |
+          merged=$(tr -d '[:space:]' < .github/upstream-version)
+          latest=$(gh release view -R "$UPSTREAM" --json tagName --jq .tagName)
+          echo "merged $merged, upstream latest $latest"
+          [ "$latest" = "$merged" ] && exit 0
+          # Only a newer version counts, so a tag set by hand ahead of upstream stays quiet.
+          newest=$(printf '%s\n%s\n' "${merged#v}" "${latest#v}" | sort -V | tail -1)
+          [ "$newest" = "${latest#v}" ] || exit 0
+
+          title="Upstream release $latest"
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "\"$title\" in:title" --json title --jq ".[] | select(.title == \"$title\") | .title")
+          [ -n "$existing" ] && { echo "issue already open for $latest"; exit 0; }
+
+          commits=$(gh api "repos/$UPSTREAM/compare/$merged...$latest" --paginate \
+            --jq '.commits[] | "- `\(.sha[0:7])` \(.commit.message | split("\n")[0])"')
+          flagged=$(printf '%s\n' "$commits" | grep -iE 'secur|vulnerab|cve|fix|patch|crash|leak|sanitiz|permission|sign|notar|deps' || true)
+          notes=$(gh release view -R "$UPSTREAM" "$latest" --json body --jq .body)
+
+          {
+            echo "Upstream published [$latest](https://github.com/$UPSTREAM/releases/tag/$latest). This fork last merged $merged."
+            echo
+            echo "### Commits that look like fixes or security work"
+            echo "${flagged:-None matched. Read the full list.}"
+            echo
+            echo "### Release notes"
+            echo "${notes:-None.}"
+            echo
+            echo "<details><summary>All commits $merged...$latest</summary>"
+            echo
+            echo "$commits"
+            echo
+            echo "</details>"
+            echo
+            echo "Merge it, keeping the fork's overlay and hotkey changes, then set \`.github/upstream-version\` to \`$latest\`."
+          } > body.md
+          gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
